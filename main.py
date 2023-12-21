@@ -61,9 +61,18 @@ conds = quantizer(wavs = wavs, namespace = 'semantic') # (2, 8, 1024) - 8 is num
 
 ### STEP 3: Set up Soundstream and train the three transformers ###
 
-from audiolm_pytorch import MusicLMSoundStream
+from audiolm_pytorch import MusicLMSoundStream, SoundStreamTrainer
 
 soundstream = MusicLMSoundStream()
+
+trainer = SoundStreamTrainer(
+    soundstream,
+    folder = '/audio/soundstream',
+    batch_size = 4,
+    grad_accum_every = 8,
+    data_max_length_seconds = 2,
+    num_train_steps = 1_000_000
+).cuda()
 
 from audiolm_pytorch import HubertWithKmeans
 
