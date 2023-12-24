@@ -66,6 +66,7 @@ ConstantLRScheduler = partial(LambdaLR, lr_lambda = lambda step: 1.)
 ONE_TRAINER_INSTANTIATED = False
 
 def check_one_trainer():
+    return # TODO: figure out why only one trainer can be instantiated
     global ONE_TRAINER_INSTANTIATED
     assert not ONE_TRAINER_INSTANTIATED, 'only one Trainer can be instantiated at a time for training'
     ONE_TRAINER_INSTANTIATED = True
@@ -236,7 +237,7 @@ class SoundStreamTrainer(nn.Module):
         save_results_every: int = 100,
         save_model_every: int = 1000,
         log_losses_every: int = 1,
-        results_folder: str = './results',
+        results_folder: str = './results/soundstream',
         valid_frac: float = 0.05,
         random_split_seed: int = 42,
         use_ema: bool = True,
@@ -734,7 +735,7 @@ class SemanticTransformerTrainer(nn.Module):
         random_split_seed = 42,
         save_results_every = 100,
         save_model_every = 1000,
-        results_folder = './results',
+        results_folder = './results/semantic',
         accelerate_kwargs: dict = dict(),
         init_process_group_timeout_seconds = 1800,
         use_wandb_tracking = False,
@@ -1027,7 +1028,7 @@ class CoarseTransformerTrainer(nn.Module):
         random_split_seed = 42,
         save_results_every = 100,
         save_model_every = 1000,
-        results_folder = './results',
+        results_folder = './results/coarse',
         accelerate_kwargs: dict = dict(),
         init_process_group_timeout_seconds = 1800,
         split_batches = False,
@@ -1327,7 +1328,7 @@ class FineTransformerTrainer(nn.Module):
         random_split_seed = 42,
         save_results_every = 100,
         save_model_every = 1000,
-        results_folder = './results',
+        results_folder = './results/fine',
         accelerate_kwargs: dict = dict(),
         init_process_group_timeout_seconds = 1800,
         split_batches = False,

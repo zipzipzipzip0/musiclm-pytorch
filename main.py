@@ -25,21 +25,7 @@ mulan = MuLaN(
     text_transformer = text_transformer
 )
 
-# get a ton of <sound, text> pairs and train
-
-wavs = torch.randn(2, 1024)
-texts = torch.randint(0, 20000, (2, 256))
-
-loss = mulan(wavs, texts)
-loss.backward()
-
-# after much training, you can embed sounds and text into a joint embedding space
-# for conditioning the audio LM
-
-embeds = mulan.get_audio_latents(wavs)  # during training
-
-embeds = mulan.get_text_latents(texts)  # during inference
-
+mulan.load_state_dict(torch.load('saves/mulan.pth'))
 
 ### STEP 2: Obtain conditioning embeddings ###
 
@@ -53,26 +39,17 @@ quantizer = MuLaNEmbedQuantizer(
     namespaces = ('semantic', 'coarse', 'fine')
 )
 
-# now say you want the conditioning embeddings for semantic transformer
-
-wavs = torch.randn(2, 1024)
-conds = quantizer(wavs = wavs, namespace = 'semantic') # (2, 8, 1024) - 8 is number of quantizers
-
-
 ### STEP 3: Set up Soundstream and train the three transformers ###
 
-from audiolm_pytorch import MusicLMSoundStream, SoundStreamTrainer
+from audiolm_pytorch import MusicLMSoundStream
 
-soundstream = MusicLMSoundStream()
+dataset_path = './audio/fma_small'
 
-trainer = SoundStreamTrainer(
-    soundstream,
-    folder = '/audio/soundstream',
-    batch_size = 4,
-    grad_accum_every = 8,
-    data_max_length_seconds = 2,
-    num_train_steps = 1_000_000
-).cuda()
+soundstream = MusicLMSoundStream(
+    codebook_size = 4096
+)
+
+soundstream.load_state_dict(torch.load('saves/soundstream.pth'))
 
 from audiolm_pytorch import HubertWithKmeans
 
@@ -81,72 +58,42 @@ wav2vec = HubertWithKmeans(
     kmeans_path = './hubert/hubert_base_ls960_L9_km500.bin'
 )
 
-from audiolm_pytorch import SemanticTransformer, SemanticTransformerTrainer
+from audiolm_pytorch import SemanticTransformer
 
 semantic_transformer = SemanticTransformer(
     num_semantic_tokens = wav2vec.codebook_size,
     dim = 1024,
     depth = 6,
     audio_text_condition = True      # this must be set to True (same for CoarseTransformer and FineTransformers)
-).cuda()
-
-trainer = SemanticTransformerTrainer(
-    transformer = semantic_transformer,
-    wav2vec = wav2vec,
-    audio_conditioner = quantizer,   # pass in the MulanEmbedQuantizer instance above
-    folder ='/audio/semantic',
-    batch_size = 1,
-    data_max_length = 320 * 32,
-    num_train_steps = 1
 )
 
-trainer.train()
+semantic_transformer.load_state_dict(torch.load('saves/semantic_transformer.pth'))
 
-from audiolm_pytorch import CoarseTransformer, CoarseTransformerTrainer
+from audiolm_pytorch import CoarseTransformer
 
 coarse_transformer = CoarseTransformer(
     num_semantic_tokens = wav2vec.codebook_size,
     codebook_size = 1024,
     num_coarse_quantizers = 3,
-    dim = 512,
+    dim = 1024,
     depth = 6,
     audio_text_condition = True
 )
 
-trainer = CoarseTransformerTrainer(
-    transformer = coarse_transformer,
-    codec = soundstream,
-    wav2vec = wav2vec,
-    folder = '/audio/coarse',
-    batch_size = 1,
-    data_max_length = 320 * 32,
-    num_train_steps = 1_000_000
-)
+coarse_transformer.load_state_dict(torch.load('saves/coarse_transformer.pth'))
 
-trainer.train()
-
-from audiolm_pytorch import FineTransformer, FineTransformerTrainer
+from audiolm_pytorch import FineTransformer
 
 fine_transformer = FineTransformer(
     num_coarse_quantizers = 3,
     num_fine_quantizers = 5,
     codebook_size = 1024,
-    dim = 512,
+    dim = 1024,
     depth = 6,
     audio_text_condition = True
 )
 
-trainer = FineTransformerTrainer(
-    transformer = fine_transformer,
-    codec = soundstream,
-    folder = '/audio/fine',
-    batch_size = 1,
-    data_max_length = 320 * 32,
-    num_train_steps = 1_000_000
-)
-
-trainer.train()
-
+fine_transformer.load_state_dict(torch.load('saves/fine_transformer.pth'))
 
 ### STEP 4: Assemble AudioLM ###
 
@@ -160,7 +107,6 @@ audio_lm = AudioLM(
     fine_transformer = fine_transformer
 )
 
-
 ### STEP 5: Run model ###
 
 from musiclm_pytorch import MusicLM
@@ -170,4 +116,12 @@ musiclm = MusicLM(
     mulan_embed_quantizer = quantizer    # the `MuLaNEmbedQuantizer` from above
 )
 
-music = musiclm('a fanfare style victory march', num_samples = 4) # sample 4 and pick the top match with mulan
+prompt = 'a fanfare style victory march'
+
+music = musiclm(prompt, num_samples = 4) # sample 4 and pick the top match with mulan
+
+import torchaudio
+
+output_path = f'./output/{prompt}.wav'
+sample_rate = 44100
+torchaudio.save(output_path, music.cpu(), sample_rate)
